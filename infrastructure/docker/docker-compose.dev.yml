@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: research_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-research_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-research_secret_44}
+      POSTGRES_DB: ${POSTGRES_DB:-research_agent_db}
+    ports:
+      - "5438:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: research_redis
+    restart: always
+    ports:
+      - "6385:6379"
+
+  qdrant:
+    image: qdrant/qdrant:v1.8.0
+    container_name: research_qdrant
+    restart: always
+    ports:
+      - "6338:6333"
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: research_backend
+    restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8006:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-research_user}:${POSTGRES_PASSWORD:-research_secret_44}@postgres:5432/${POSTGRES_DB:-research_agent_db}
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+    depends_on:
+      - postgres
+      - redis
+      - qdrant
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: research_frontend
+    restart: always
+    ports:
+      - "3006:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8006/api/v1
+    depends_on:
+      - backend
